@@ -8,6 +8,7 @@
         <li>
             <a id="btnOpenModal" type="button" class="text-white" data-bs-toggle="modal" data-bs-target="#searchCoordinatesModal">Query Drawing</a>
         </li>
+        <li><a id="clearMapButton" href="#">Clear Map</a></li>
     </ul>
 </div>
 <div id="map" class="map"></div>
@@ -227,4 +228,14 @@
         var extent = vectorSource.getExtent();
         map.getView().fit(extent, { padding: [50, 50, 50, 50] });
     }
+
+    const clearMapButton = document.getElementById("clearMapButton");
+
+    clearMapButton.addEventListener('click', function () {
+        map.getLayers().forEach(function (layer) {
+            if (layer instanceof ol.layer.Vector) {
+                layer.getSource().clear();
+            }
+        });
+    });
 </script>
