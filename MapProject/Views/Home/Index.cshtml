@@ -1,0 +1,230 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+
+<div class="menu">
+    <ul>
+        <li><a onclick="addDrawing()" href="#">Add Drawing</a></li>
+        <li>
+            <a id="btnOpenModal" type="button" class="text-white" data-bs-toggle="modal" data-bs-target="#searchCoordinatesModal">Query Drawing</a>
+        </li>
+    </ul>
+</div>
+<div id="map" class="map"></div>
+
+<!-- Modal -->
+<div class="modal fade" id="savedCoordinatesModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Enter Name and Number</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="myForm">
+                    <div class="mb-3">
+                        <label for="name" class="col-form-label">Name:</label>
+                        <input type="text" class="form-control" id="name">
+                    </div>
+                    <div class="mb-3">
+                        <label for="number" class="col-form-label">Number:</label>
+                        <input type="text" class="form-control" id="number">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="submitForm()">Submit</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="searchCoordinatesModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Veriler</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <table id="tableData" class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>İsim</th>
+                            <th>Numara</th>
+                            <th>Koordinatlar</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Kapat</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script type="text/javascript">
+    let map, draw, source, layer, coordinates;
+
+    const tableBody = document.getElementById('tableData').getElementsByTagName('tbody')[0];
+    const btnOpenModal = document.getElementById('btnOpenModal');
+
+    var savedCoordinatesModal = new bootstrap.Modal(document.getElementById('savedCoordinatesModal'), {
+        keyboard: false
+    });
+
+    var searchCoordinatesModal = new bootstrap.Modal(document.getElementById('searchCoordinatesModal'), {
+        keyboard: false
+    });
+
+    initializeMap = () => {
+
+        source = new ol.source.Vector({ wrapX: false });
+
+        layer = new ol.layer.Vector({
+            source: source,
+        });
+
+        map = new ol.Map({
+            target: 'map',
+            layers: [
+                new ol.layer.Tile({
+                    source: new ol.source.OSM()
+                }),
+                layer
+            ],
+            view: new ol.View({
+                center: [3875337.272593909, 4673762.797695817],
+                zoom: 7
+            })
+        });
+    }
+
+    addInteraction = () => {
+
+        draw = new ol.interaction.Draw({
+            source: source,
+            type: "LineString"
+        });
+
+        map.addInteraction(draw);
+
+        draw.setActive(false);
+
+        draw.on("drawend",
+            (event) => {
+
+                console.log(event.feature.getGeometry().getCoordinates());
+
+                coordinates = event.feature.getGeometry().getCoordinates();
+
+                savedCoordinatesModal.show();
+
+                draw.setActive(false);
+            });
+    }
+
+    addDrawing = () => {
+
+        draw.setActive(true);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+
+        initializeMap();
+
+        addInteraction();
+    });
+
+    function submitForm() {
+        var name = document.getElementById("name").value;
+        var number = document.getElementById("number").value
+
+        var body = JSON.stringify({ name: name, number: number, coordinates: coordinates });
+        console.log(body);
+
+        fetch('/map/create', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: body
+        })
+            .then(data => console.log(data))
+            .catch(error => console.error(error))
+            .finally(() => savedCoordinatesModal.hide());
+
+    }
+
+    btnOpenModal.addEventListener('click', function () {
+        fetch('/Map/Query')
+            .then(response => response.json())
+            .then(data => {
+                tableBody.innerHTML = "";
+                data.forEach(item => {
+                    const row = tableBody.insertRow();
+                    const nameCell = row.insertCell(0);
+                    const numberCell = row.insertCell(1);
+                    const coordinatesCell = row.insertCell(2);
+
+                    nameCell.innerHTML = item.name;
+                    numberCell.innerHTML = item.number;
+                    coordinatesCell.innerHTML = JSON.stringify(item.coordinates);
+
+                    row.setAttribute("data-coordinates", JSON.stringify(item.coordinates));
+
+                    row.addEventListener("click", handleRowClick);
+
+                });
+
+                searchCoordinatesModal.show();
+            })
+            .catch(error => console.error(error));
+    });
+
+    function handleRowClick(event) {
+        const coordinates = JSON.parse(event.currentTarget.getAttribute("data-coordinates"));
+        drawCoordinates(coordinates);
+        searchCoordinatesModal.hide();
+    }
+
+    function drawCoordinates(coordinates) {
+        var vectorSource = new ol.source.Vector({
+            features: [
+                new ol.Feature({
+                    geometry: new ol.geom.Polygon([coordinates]),
+                }),
+            ],
+        });
+
+        var vectorLayer = new ol.layer.Vector({
+            source: vectorSource,
+            style: new ol.style.Style({
+                fill: new ol.style.Fill({
+                    color: "rgba(255, 255, 255, 0.2)",
+                }),
+                stroke: new ol.style.Stroke({
+                    color: "#ffcc33",
+                    width: 2,
+                }),
+                image: new ol.style.Circle({
+                    radius: 7,
+                    fill: new ol.style.Fill({
+                        color: "#ffcc33",
+                    }),
+                }),
+            }),
+        });
+
+        map.addLayer(vectorLayer);
+
+        var extent = vectorSource.getExtent();
+        map.getView().fit(extent, { padding: [50, 50, 50, 50] });
+    }
+</script>
